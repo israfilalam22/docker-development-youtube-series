@@ -1,43 +1,35 @@
-# Stage 1: Build the Go app with dependencies (debug stage)
-FROM golang:1.12.5-alpine3.9 as debug
+# Stage 1: Build the Go application
+FROM golang:1.12.5-alpine3.9 AS build
 
-# Installing necessary build dependencies (Git, gcc, musl-dev)
-RUN apk update && apk upgrade && \
-    apk add --no-cache git dpkg gcc musl-dev
+# Install dependencies and setup Go environment
+RUN apk update && apk upgrade && apk add --no-cache git dpkg gcc musl-dev
 
-# Set up Go environment variables
-ENV GOPATH /go
-ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
-
-# Set the working directory for the Go source code
+# Set the working directory inside the container
 WORKDIR /go/src/work
 
-# Copy Go module files first to leverage caching and speed up builds
+# Copy Go module files to take advantage of Docker cache
 COPY ./src/go.mod ./src/go.sum ./
 
-# Download the dependencies using Go Modules
+# Download dependencies using Go modules
 RUN go mod tidy
 
-# Now copy the entire source code
-COPY ./src /go/src/work/
+# Copy the rest of the application code
+COPY ./src/ .
 
 # Build the Go application
-RUN go build -o app
+RUN go build -o app .
 
-# Copy Delve debugger script (if needed for debugging)
-COPY ./dlv.sh /
-RUN chmod +x /dlv.sh
+# Stage 2: Create a small image with the compiled app
+FROM alpine:3.9
 
-# Default entrypoint for debugging (if running in debug mode)
-ENTRYPOINT ["/dlv.sh"]
+# Set the working directory in the container
+WORKDIR /root/
 
-########### Stage 2: Production Image ###########
+# Copy the compiled binary from the build stage
+COPY --from=build /go/src/work/app .
 
-# Stage 2: Minimal Alpine image for production
-FROM alpine:3.9 as prod
+# Expose the necessary port
+EXPOSE 8080
 
-# Copy the compiled Go binary from the debug stage
-COPY --from=debug /go/src/work/app /
-
-# Set the default command to run the application
-CMD ./app
+# Run the application
+CMD ["./app"]
