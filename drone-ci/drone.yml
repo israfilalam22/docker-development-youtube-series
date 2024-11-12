@@ -8,17 +8,17 @@ steps:
   image: docker:dind
   volumes:
   - name: dockersock
-    path: /var/run
+    path: /var/run/docker.sock
   environment:
     DOCKER_USER:
       from_secret: DOCKER_USER
     DOCKER_PASSWORD:
       from_secret: DOCKER_PASSWORD
   commands:
-  - sleep 5 ### docker enough time to start
-  - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-  - docker build ./golang -t aimvector/golang:1.0.0
-  - docker push aimvector/golang:1.0.0
+    - until docker info; do echo "Waiting for Docker..."; sleep 5; done  # Wait for Docker to be ready
+    - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+    - docker build ./golang -t aimvector/golang:1.0.0
+    - docker push aimvector/golang:1.0.0
 
 services:
 - name: docker
@@ -26,7 +26,8 @@ services:
   privileged: true
   volumes:
   - name: dockersock
-    path: /var/run
+    path: /var/run/docker.sock
+
 volumes:
 - name: dockersock
   temp: {}
