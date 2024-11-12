@@ -1,32 +1,43 @@
+# Stage 1: Build the Go app with dependencies (debug stage)
 FROM golang:1.12.5-alpine3.9 as debug
 
-# installing git
+# Installing necessary build dependencies (Git, gcc, musl-dev)
 RUN apk update && apk upgrade && \
-    apk add --no-cache git \
-        dpkg \
-        gcc \
-        git \
-        musl-dev
+    apk add --no-cache git dpkg gcc musl-dev
 
+# Set up Go environment variables
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
-RUN go get github.com/sirupsen/logrus
-RUN go get github.com/buaazp/fasthttprouter
-RUN go get github.com/valyala/fasthttp
-RUN go get github.com/go-delve/delve/cmd/dlv
-
+# Set the working directory for the Go source code
 WORKDIR /go/src/work
+
+# Copy Go module files first to leverage caching and speed up builds
+COPY ./src/go.mod ./src/go.sum ./
+
+# Download the dependencies using Go Modules
+RUN go mod tidy
+
+# Now copy the entire source code
 COPY ./src /go/src/work/
 
+# Build the Go application
 RUN go build -o app
-### Run the Delve debugger ###
+
+# Copy Delve debugger script (if needed for debugging)
 COPY ./dlv.sh /
-RUN chmod +x /dlv.sh 
-ENTRYPOINT [ "/dlv.sh"]
+RUN chmod +x /dlv.sh
 
-###########START NEW IMAGE###################
+# Default entrypoint for debugging (if running in debug mode)
+ENTRYPOINT ["/dlv.sh"]
 
+########### Stage 2: Production Image ###########
+
+# Stage 2: Minimal Alpine image for production
 FROM alpine:3.9 as prod
+
+# Copy the compiled Go binary from the debug stage
 COPY --from=debug /go/src/work/app /
+
+# Set the default command to run the application
 CMD ./app
