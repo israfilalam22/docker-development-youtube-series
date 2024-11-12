@@ -1,33 +1,45 @@
----
 kind: pipeline
 type: kubernetes
 name: default
 
 steps:
+# Step 1: Build and Push Docker Image
 - name: build-push
   image: docker:dind
   volumes:
-  - name: dockersock
-    path: /var/run/
+    - name: dockersock
+      path: /var/run/
   environment:
     DOCKER_USER:
-      from_secret: DOCKER_USER
+      from_secret: DOCKER_USER  # Docker registry username secret
     DOCKER_PASSWORD:
-      from_secret: DOCKER_PASSWORD
+      from_secret: DOCKER_PASSWORD  # Docker registry password secret
   commands:
     - until docker info; do echo "Waiting for Docker..."; sleep 5; done  # Wait for Docker to be ready
-    - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-    - docker build ./golang -t aimvector/golang:1.0.0
-    - docker push aimvector/golang:1.0.0
+    - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD  # Docker login using secrets
+    - docker build ./golang -t aimvector/golang:1.0.0  # Build Docker image from ./golang directory
+    - docker push aimvector/golang:1.0.0  # Push the image to Docker Hub
 
+# Step 2: Deploy to Kubernetes
+- name: deploy
+  image: lachlanevenson/k8s-kubectl:latest
+  environment:
+    KUBECONFIG:
+      from_secret: kubeconfig  # Kubernetes kubeconfig secret for authentication
+  commands:
+    - kubectl apply -f ./k8s/deployment.yaml  # Apply Kubernetes deployment (adjust path if needed)
+    - kubectl rollout restart deployment/my-app  # Restart the deployment to apply the new image
+
+# Docker-in-Docker service (for building Docker images)
 services:
 - name: docker
   image: docker:dind
-  privileged: true
+  privileged: true  # Docker-in-Docker requires privileged mode
   volumes:
-  - name: dockersock
-    path: /var/run/
+    - name: dockersock
+      path: /var/run/
 
+# Volumes definition for Docker socket sharing
 volumes:
 - name: dockersock
-  temp: {}
+  temp: {}  # Temporary volume to mount Docker socket
